@@ -5,11 +5,20 @@ from setuptools import find_packages, setup
 
 _dir_ = os.path.dirname(__file__)
 
+tests_require = [
+    "coverage",
+    "mock",
+    "pytest",
+    "pytest-cov",
+    "pytest-django",
+    "pytest-pythonpath",
+    "tox",
+]
 
 if sys.version_info < (3, 4):
-    install_requires = ['Django>=1.8,<2.0', 'tldextract>=1.2']
+    tests_require.append("Django>=1.8,<2.0")
 else:
-    install_requires = ['Django>=1.8,<2.3', 'tldextract>=1.2']
+    tests_require.append("Django>=2.0,<3.1")
 
 
 def long_description():
@@ -39,7 +48,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     package_data={"multisite": files},
-    install_requires=install_requires,
+    install_requires=["tldextract>=1.2"],
     setup_requires=["pytest-runner"],
     tests_require=[
         "coverage",
