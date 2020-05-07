@@ -2,6 +2,12 @@
 Release Notes
 =============
 
+1.8.0
+----------
+
+- Support for Django 3.0 (PR #68 - thanks @erikvw)
+- Fix middleware usage post Django 2.0 (PR #69 thanks @mihalikv)
+
 1.7.0
 -----
 
