@@ -50,15 +50,7 @@ setup(
     package_data={"multisite": files},
     install_requires=["tldextract>=1.2"],
     setup_requires=["pytest-runner"],
-    tests_require=[
-        "coverage",
-        "mock",
-        "pytest",
-        "pytest-cov",
-        "pytest-django",
-        "pytest-pythonpath",
-        "tox",
-    ],
+    tests_require=tests_require,
     test_suite="multisite.tests",
     classifiers=[
         "Development Status :: 4 - Beta",
