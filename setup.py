@@ -48,7 +48,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     package_data={"multisite": files},
-    install_requires=["pluggy<1.0,>=0.12", "tldextract>=1.2"],
+    install_requires=["pluggy<1.0,>=0.12", "tldextract>=1.2,<3.0"],
     setup_requires=["pytest-runner"],
     tests_require=tests_require,
     test_suite="multisite.tests",
