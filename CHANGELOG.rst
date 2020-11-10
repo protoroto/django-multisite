@@ -2,6 +2,14 @@
 Release Notes
 =============
 
+1.9.0
+-----
+
+* Fix tldextract version 3.0.0 breaking changes (Issue #72 / PR #74)
+* Fix test requirements missing Django
+* Fix Pluggy dependency version conflict
+* Remove support for Python 3.5 / Django < 1.11
+
 1.8.0
 ----------
 
