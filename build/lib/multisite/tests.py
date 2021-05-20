@@ -15,10 +15,14 @@ import os
 import pytest
 import sys
 import tempfile
-
-
+<<<<<<< HEAD
+import warnings
+from six import StringIO
+from unittest import skipUnless
+=======
 from io import StringIO
 from unittest import mock, skipUnless
+>>>>>>> feature/django32
 
 from django.urls import re_path
 
