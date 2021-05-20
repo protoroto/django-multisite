@@ -16,7 +16,6 @@ import pytest
 import sys
 import tempfile
 
-
 from io import StringIO
 from unittest import mock, skipUnless
 
