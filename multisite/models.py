@@ -1,8 +1,12 @@
 from __future__ import unicode_literals
 from __future__ import absolute_import
 
+import django
 import operator
+
 from functools import reduce
+from six import python_2_unicode_compatible
+from six.moves import range
 
 from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
@@ -11,15 +15,13 @@ from django.db import connections, models, router
 from django.db.models import Q
 from django.db.models.signals import pre_save, post_save
 from django.db.models.signals import post_migrate
-from django.utils.encoding import python_2_unicode_compatible
-from django.utils.translation import ugettext_lazy as _
 
 from .hacks import use_framework_for_site_cache
 
-try:
-    xrange
-except NameError:  # python3
-    xrange = range
+if django.VERSION < (2,):
+    from django.utils.translation import ugettext_lazy as _
+else:
+    from django.utils.translation import gettext_lazy as _
 
 _site_domain = Site._meta.get_field('domain')
 
@@ -85,7 +87,7 @@ class AliasManager(models.Manager):
             bits = host.split('.')
 
         result = []
-        for i in xrange(0, (len(bits) + 1)):
+        for i in range(0, (len(bits) + 1)):
             if i == 0:
                 host = '.'.join(bits[i:])
             else:
