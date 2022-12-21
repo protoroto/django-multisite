@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-from __future__ import absolute_import
+from django.db import migrations, models
 
-from django.db import models, migrations
 import multisite.models
 
 
@@ -28,6 +25,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AlterUniqueTogether(
             name='alias',
-            unique_together=set([('is_canonical', 'site')]),
+            unique_together={('is_canonical', 'site')},
         ),
     ]

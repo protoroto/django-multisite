@@ -1,5 +1,4 @@
 import os
-import sys
 
 from setuptools import find_packages, setup
 
@@ -15,10 +14,7 @@ tests_require = [
     "tox",
 ]
 
-if sys.version_info < (3, 4):
-    tests_require.append("Django>=1.8,<2.0")
-else:
-    tests_require.append("Django>=2.0,<3.1")
+tests_require.append("Django>=2.0,<3.1")
 
 
 def long_description():

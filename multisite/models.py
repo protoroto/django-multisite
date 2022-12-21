@@ -1,27 +1,15 @@
-from __future__ import unicode_literals
-from __future__ import absolute_import
-
-import django
 import operator
-
 from functools import reduce
-from six import python_2_unicode_compatible
-from six.moves import range
 
 from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_ipv4_address
 from django.db import connections, models, router
 from django.db.models import Q
-from django.db.models.signals import pre_save, post_save
-from django.db.models.signals import post_migrate
+from django.db.models.signals import post_migrate, post_save, pre_save
+from django.utils.translation import gettext_lazy as _
 
 from .hacks import use_framework_for_site_cache
-
-if django.VERSION < (2,):
-    from django.utils.translation import ugettext_lazy as _
-else:
-    from django.utils.translation import gettext_lazy as _
 
 _site_domain = Site._meta.get_field('domain')
 
@@ -32,7 +20,7 @@ class AliasManager(models.Manager):
     """Manager for all Aliases."""
 
     def get_queryset(self):
-        return super(AliasManager, self).get_queryset().select_related('site')
+        return super().get_queryset().select_related('site')
 
     def resolve(self, host, port=None):
         """
@@ -49,7 +37,7 @@ class AliasManager(models.Manager):
         """
         domains = self._expand_netloc(host=host, port=port)
         q = reduce(operator.or_, (Q(domain__iexact=d) for d in domains))
-        aliases = dict((a.domain, a) for a in self.get_queryset().filter(q))
+        aliases = {a.domain: a for a in self.get_queryset().filter(q)}
         for domain in domains:
             try:
                 return aliases[domain]
@@ -77,7 +65,7 @@ class AliasManager(models.Manager):
          '*:80', '*']
         """
         if not host:
-            raise ValueError(u"Invalid host: %s" % host)
+            raise ValueError("Invalid host: %s" % host)
 
         try:
             validate_ipv4_address(host)
@@ -93,7 +81,7 @@ class AliasManager(models.Manager):
             else:
                 host = '.'.join(['*'] + bits[i:])
             if port:
-                result.append("%s:%s" % (host, port))
+                result.append(f"{host}:{port}")
             result.append(host)
         return result
 
@@ -102,7 +90,7 @@ class CanonicalAliasManager(models.Manager):
     """Manager for Alias objects where is_canonical is True."""
 
     def get_queryset(self):
-        qset = super(CanonicalAliasManager, self).get_queryset()
+        qset = super().get_queryset()
         return qset.filter(is_canonical=True)
 
     def sync_many(self, *args, **kwargs):
@@ -141,17 +129,16 @@ class NotCanonicalAliasManager(models.Manager):
     """Manager for Aliases where is_canonical is None."""
 
     def get_queryset(self):
-        qset = super(NotCanonicalAliasManager, self).get_queryset()
+        qset = super().get_queryset()
         return qset.filter(is_canonical__isnull=True)
 
 
 def validate_true_or_none(value):
     """Raises ValidationError if value is not True or None."""
     if value not in (True, None):
-        raise ValidationError(u'%r must be True or None' % value)
+        raise ValidationError('%r must be True or None' % value)
 
 
-@python_2_unicode_compatible
 class Alias(models.Model):
     """
     Model for domain-name aliases for Site objects.
@@ -170,11 +157,12 @@ class Alias(models.Model):
     site = models.ForeignKey(
         Site, related_name='aliases', on_delete=models.CASCADE
     )
-    is_canonical = models.NullBooleanField(
+    is_canonical = models.BooleanField(
         _('is canonical?'),
         default=None, editable=False,
         validators=[validate_true_or_none],
         help_text=_('Does this domain name match the one in site?'),
+        null=True
     )
     redirect_to_canonical = models.BooleanField(
         _('redirect to canonical?'),
@@ -191,7 +179,7 @@ class Alias(models.Model):
         verbose_name_plural = _('aliases')
 
     def __str__(self):
-        return "%s -> %s" % (self.domain, self.site.domain)
+        return f"{self.domain} -> {self.site.domain}"
 
     def __repr__(self):
         return '<Alias: %s>' % str(self)
@@ -207,12 +195,12 @@ class Alias(models.Model):
             raise ValidationError(
                 {'domain': ['Does not match %r' % self.site]}
             )
-        super(Alias, self).save_base(*args, **kwargs)
+        super().save_base(*args, **kwargs)
 
     def validate_unique(self, exclude=None):
         errors = {}
         try:
-            super(Alias, self).validate_unique(exclude=exclude)
+            super().validate_unique(exclude=exclude)
         except ValidationError as e:
             errors = e.update_error_dict(errors)
 

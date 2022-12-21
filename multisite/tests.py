@@ -10,26 +10,14 @@ from the parent directory.
 This file uses relative imports and so cannot be run standalone.
 """
 
-from __future__ import unicode_literals
-from __future__ import absolute_import
-
-import django
 import logging
 import os
-import pytest
 import sys
 import tempfile
-import warnings
-from six import StringIO
-from unittest import skipUnless
-
-try:
-    from unittest import mock
-except ImportError:
-    import mock
+from io import StringIO
+from unittest import mock, skipUnless
 
 from django.conf import settings
-from django.conf.urls import url
 from django.contrib.sites.models import Site
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.core.management import call_command
@@ -37,8 +25,11 @@ from django.http import Http404, HttpResponse
 from django.template.loader import get_template
 from django.test import TestCase, override_settings
 from django.test.client import RequestFactory as DjangoRequestFactory
+from django.urls import path
 
-from multisite import SiteDomain, SiteID, threadlocals
+import pytest
+
+from multisite import SiteDomain, SiteID
 
 from .hacks import use_framework_for_site_cache
 from .hosts import ALLOWED_HOSTS, AllowedHosts, IterableLazyObject
@@ -48,22 +39,23 @@ from .models import Alias
 
 class RequestFactory(DjangoRequestFactory):
     def __init__(self, host):
-        super(RequestFactory, self).__init__()
+        super().__init__()
         self.host = host
 
-    def get(self, path, data={}, host=None, **extra):
+    def get(self, path, data=None, host=None, **extra):
         if host is None:
             host = self.host
-        return super(RequestFactory, self).get(path=path, data=data,
-                                               HTTP_HOST=host, **extra)
+        if not data:
+            data = {}
+        return super().get(path=path, data=data, HTTP_HOST=host, **extra)
+
 
 @pytest.mark.django_db
-@skipUnless(Site._meta.installed,
-            'django.contrib.sites is not in settings.INSTALLED_APPS')
-@override_settings(
-    SITE_ID=SiteID(),
-    CACHE_SITES_KEY_PREFIX='__test__',
+@skipUnless(
+    'django.contrib.sites' in settings.INSTALLED_APPS,
+    'django.contrib.sites is not in settings.INSTALLED_APPS'
 )
+@override_settings(SITE_ID=SiteID(), CACHE_SITES_KEY_PREFIX='__test__')
 class TestContribSite(TestCase):
     def setUp(self):
         Site.objects.all().delete()
@@ -75,19 +67,23 @@ class TestContribSite(TestCase):
         self.assertEqual(current_site, self.site)
         self.assertEqual(current_site.id, settings.SITE_ID)
 
+
 # Because we are a middleware package, we have no views available to test with easily
 # So create one:
 # (This is only used by test_integration)
 urlpatterns = [
-    url(r'^domain/$', lambda request, *args, **kwargs: HttpResponse(str(Site.objects.get_current())))
+    path('domain/', lambda request, *args, **kwargs: HttpResponse(str(Site.objects.get_current())))
 ]
 
+
 @pytest.mark.django_db
-@skipUnless(Site._meta.installed,
-            'django.contrib.sites is not in settings.INSTALLED_APPS')
+@skipUnless(
+    'django.contrib.sites' in settings.INSTALLED_APPS,
+    'django.contrib.sites is not in settings.INSTALLED_APPS'
+)
 @override_settings(
     ALLOWED_SITES=['*'],
-    ROOT_URLCONF=__name__, #this means that urlpatterns above is used when .get() is called below.
+    ROOT_URLCONF=__name__,  # this means that urlpatterns above is used when .get() is called below.
     SITE_ID=SiteID(default=0),
     CACHE_MULTISITE_ALIAS='multisite',
     CACHES={
@@ -108,65 +104,100 @@ class DynamicSiteMiddlewareTest(TestCase):
 
     def test_valid_domain(self):
         # Make the request
+        get_response = mock.MagicMock()
         request = self.factory.get('/')
-        self.assertEqual(DynamicSiteMiddleware().process_request(request), None)
+
+        middleware = DynamicSiteMiddleware(get_response)
+        response = middleware(request)
+
+        self.assertEqual(response, None)
         self.assertEqual(settings.SITE_ID, self.site.pk)
         # Request again
-        self.assertEqual(DynamicSiteMiddleware().process_request(request), None)
+        self.assertEqual(response, None)
         self.assertEqual(settings.SITE_ID, self.site.pk)
 
     def test_valid_domain_port(self):
         # Make the request with a specific port
+        get_response = mock.MagicMock()
         request = self.factory.get('/', host=self.host + ':8000')
-        self.assertEqual(DynamicSiteMiddleware().process_request(request), None)
+
+        middleware = DynamicSiteMiddleware(get_response)
+        response = middleware(request)
+        self.assertEqual(response, None)
         self.assertEqual(settings.SITE_ID, self.site.pk)
         # Request again
-        self.assertEqual(DynamicSiteMiddleware().process_request(request), None)
+        response = middleware(request)
+        self.assertEqual(response, None)
         self.assertEqual(settings.SITE_ID, self.site.pk)
 
     def test_case_sensitivity(self):
         # Make the request in all uppercase
+        get_response = mock.MagicMock()
         request = self.factory.get('/', host=self.host.upper())
-        self.assertEqual(DynamicSiteMiddleware().process_request(request), None)
+
+        middleware = DynamicSiteMiddleware(get_response)
+        response = middleware(request)
+
+        self.assertEqual(response, None)
         self.assertEqual(settings.SITE_ID, self.site.pk)
 
     def test_change_domain(self):
         # Make the request
+        get_response = mock.MagicMock()
         request = self.factory.get('/')
-        self.assertEqual(DynamicSiteMiddleware().process_request(request), None)
+        middleware = DynamicSiteMiddleware(get_response)
+        response = middleware(request)
+        self.assertEqual(response, None)
         self.assertEqual(settings.SITE_ID, self.site.pk)
+
         # Another request with a different site
-        request = self.factory.get('/', host=self.site2.domain)
-        self.assertEqual(DynamicSiteMiddleware().process_request(request), None)
+        request2 = self.factory.get('/', host=self.site2.domain)
+        response2 = middleware(request2)
+        self.assertEqual(response2, None)
         self.assertEqual(settings.SITE_ID, self.site2.pk)
 
     def test_unknown_host(self):
         # Unknown host
+        get_response = mock.MagicMock()
         request = self.factory.get('/', host='unknown')
+
+        middleware = DynamicSiteMiddleware(get_response)
+
         with self.assertRaises(Http404):
-            DynamicSiteMiddleware().process_request(request)
+            middleware(request)
+
         # The middleware resets SiteID to its default value, as given above, on error.
         self.assertEqual(settings.SITE_ID, 0)
 
     def test_unknown_hostport(self):
         # Unknown host:port
+
+        get_response = mock.MagicMock()
         request = self.factory.get('/', host='unknown:8000')
+
+        middleware = DynamicSiteMiddleware(get_response)
+
         with self.assertRaises(Http404):
-            DynamicSiteMiddleware().process_request(request)
+            middleware(request)
+
         # The middleware resets SiteID to its default value, as given above, on error.
         self.assertEqual(settings.SITE_ID, 0)
 
     def test_invalid_host(self):
         # Invalid host
+        get_response = mock.MagicMock()
         request = self.factory.get('/', host='')
+        middleware = DynamicSiteMiddleware(get_response)
         with self.assertRaises(Http404):
-            DynamicSiteMiddleware().process_request(request)
+            middleware(request)
 
     def test_invalid_hostport(self):
         # Invalid host:port
+        get_response = mock.MagicMock()
         request = self.factory.get('/', host=':8000')
+        middleware = DynamicSiteMiddleware(get_response)
         with self.assertRaises(Http404):
-            DynamicSiteMiddleware().process_request(request)
+            middleware(request)
 
     def test_no_sites(self):
         # FIXME: this needs to go into its own TestCase since it requires modifying the fixture to work properly
@@ -174,8 +205,7 @@ class DynamicSiteMiddlewareTest(TestCase):
         Site.objects.all().delete()
         # Make the request
         request = self.factory.get('/')
-        self.assertRaises(Http404,
-                          DynamicSiteMiddleware().process_request, request)
+        self.assertRaises(Http404, DynamicSiteMiddleware, request)
         # The middleware resets SiteID to its default value, as given above, on error.
         self.assertEqual(settings.SITE_ID, 0)
 
@@ -184,19 +214,26 @@ class DynamicSiteMiddlewareTest(TestCase):
         alias = Alias.objects.create(site=self.site, domain=host)
         self.assertTrue(alias.redirect_to_canonical)
         # Make the request
+        get_response = mock.MagicMock()
         request = self.factory.get('/path', host=host)
-        response = DynamicSiteMiddleware().process_request(request)
+
+        middleware = DynamicSiteMiddleware(get_response)
+        response = middleware(request)
         self.assertEqual(response.status_code, 301)
-        self.assertEqual(response['Location'],
-                         "http://%s/path" % self.host)
+        self.assertEqual(response['Location'], "http://%s/path" % self.host)
 
     def test_no_redirect(self):
         host = 'example.org'
-        Alias.objects.create(site=self.site, domain=host,
-                             redirect_to_canonical=False)
+        Alias.objects.create(site=self.site, domain=host, redirect_to_canonical=False)
         # Make the request
+
+        get_response = mock.MagicMock()
         request = self.factory.get('/path', host=host)
-        self.assertEqual(DynamicSiteMiddleware().process_request(request), None)
+
+        middleware = DynamicSiteMiddleware(get_response)
+        response = middleware(request)
+
+        self.assertEqual(response, None)
         self.assertEqual(settings.SITE_ID, self.site.pk)
 
     def test_integration(self):
@@ -215,8 +252,10 @@ class DynamicSiteMiddlewareTest(TestCase):
 
 
 @pytest.mark.django_db
-@skipUnless(Site._meta.installed,
-            'django.contrib.sites is not in settings.INSTALLED_APPS')
+@skipUnless(
+    'django.contrib.sites' in settings.INSTALLED_APPS,
+    'django.contrib.sites is not in settings.INSTALLED_APPS'
+)
 @override_settings(
     SITE_ID=SiteID(default=0),
     CACHE_MULTISITE_ALIAS='multisite',
@@ -234,14 +273,20 @@ class DynamicSiteMiddlewareFallbackTest(TestCase):
     def test_404(self):
         request = self.factory.get('/')
         self.assertRaises(Http404,
-                          DynamicSiteMiddleware().process_request, request)
+                          DynamicSiteMiddleware, request)
         self.assertEqual(settings.SITE_ID, 0)
 
     def test_testserver(self):
         host = 'testserver'
         site = Site.objects.create(domain=host)
+
+        get_response = mock.MagicMock()
         request = self.factory.get('/', host=host)
-        self.assertEqual(DynamicSiteMiddleware().process_request(request), None)
+
+        middleware = DynamicSiteMiddleware(get_response)
+        response = middleware(request)
+
+        self.assertEqual(response, None)
         self.assertEqual(settings.SITE_ID, site.pk)
 
     def test_string_class(self):
@@ -249,32 +294,39 @@ class DynamicSiteMiddlewareFallbackTest(TestCase):
         settings.MULTISITE_FALLBACK = 'django.views.generic.base.RedirectView'
         settings.MULTISITE_FALLBACK_KWARGS = {'url': 'http://example.com/',
                                               'permanent': False}
+        get_response = mock.MagicMock()
         request = self.factory.get('/')
-        response = DynamicSiteMiddleware().process_request(request)
+
+        middleware = DynamicSiteMiddleware(get_response)
+        response = middleware(request)
+
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'],
-                         settings.MULTISITE_FALLBACK_KWARGS['url'])
+        self.assertEqual(response['Location'], settings.MULTISITE_FALLBACK_KWARGS['url'])
 
     def test_class_view(self):
         from django.views.generic.base import RedirectView
         settings.MULTISITE_FALLBACK = RedirectView.as_view(
             url='http://example.com/', permanent=False
         )
+        get_response = mock.MagicMock()
         request = self.factory.get('/')
-        response = DynamicSiteMiddleware().process_request(request)
+
+        middleware = DynamicSiteMiddleware(get_response)
+        response = middleware(request)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], 'http://example.com/')
 
     def test_invalid(self):
         settings.MULTISITE_FALLBACK = ''
         request = self.factory.get('/')
-        self.assertRaises(ImproperlyConfigured,
-                          DynamicSiteMiddleware().process_request, request)
+        self.assertRaises(ImproperlyConfigured, DynamicSiteMiddleware, request)
 
 
 @pytest.mark.django_db
-@skipUnless(Site._meta.installed,
-            'django.contrib.sites is not in settings.INSTALLED_APPS')
+@skipUnless(
+    'django.contrib.sites' in settings.INSTALLED_APPS,
+    'django.contrib.sites is not in settings.INSTALLED_APPS'
+)
 @override_settings(SITE_ID=0,)
 class DynamicSiteMiddlewareSettingsTest(TestCase):
     def test_invalid_settings(self):
@@ -301,12 +353,17 @@ class CacheTest(TestCase):
 
     def test_site_domain_changed(self):
         # Test to ensure that the cache is cleared properly
-        middleware = DynamicSiteMiddleware()
+        get_response = mock.MagicMock()
+        request = self.factory.get('/')
+
+        middleware = DynamicSiteMiddleware(get_response)
+        response = middleware(request)
+
         cache_key = middleware.get_cache_key(self.host)
         self.assertEqual(middleware.cache.get(cache_key), None)
         # Make the request
         request = self.factory.get('/')
-        self.assertEqual(middleware.process_request(request), None)
+        self.assertEqual(response, None)
         self.assertEqual(middleware.cache.get(cache_key).site_id,
                          self.site.pk)
         # Change the domain name
@@ -315,14 +372,15 @@ class CacheTest(TestCase):
         self.assertEqual(middleware.cache.get(cache_key), None)
         # Make the request again, which will now be invalid
         request = self.factory.get('/')
-        self.assertRaises(Http404,
-                          middleware.process_request, request)
+        self.assertRaises(Http404, middleware.process_request, request)
         self.assertEqual(settings.SITE_ID, 0)
 
 
 @pytest.mark.django_db
-@skipUnless(Site._meta.installed,
-            'django.contrib.sites is not in settings.INSTALLED_APPS')
+@skipUnless(
+    'django.contrib.sites' in settings.INSTALLED_APPS,
+    'django.contrib.sites is not in settings.INSTALLED_APPS'
+)
 @override_settings(SITE_ID=SiteID(),)
 class SiteCacheTest(TestCase):
 
@@ -429,7 +487,7 @@ class SiteCacheTest(TestCase):
         self.assertEqual(self.cache[self.site.id], self.site)
         self.assertEqual(
             self.cache._cache._get_cache_key(self.site.id),
-            "sites.looselycoupled.{}".format(self.site.id)
+            f"sites.looselycoupled.{self.site.id}"
         )
 
     @override_settings(
@@ -442,7 +500,7 @@ class SiteCacheTest(TestCase):
         self.assertEqual(self.cache[self.site.id], self.site)
         self.assertEqual(
             self.cache._cache._get_cache_key(self.site.id),
-            "sites.virtuouslyvirtual.{}".format(self.site.id)
+            f"sites.virtuouslyvirtual.{self.site.id}"
         )
 
 
@@ -520,8 +578,10 @@ class TestSiteID(TestCase):
 
 
 @pytest.mark.django_db
-@skipUnless(Site._meta.installed,
-            'django.contrib.sites is not in settings.INSTALLED_APPS')
+@skipUnless(
+    'django.contrib.sites' in settings.INSTALLED_APPS,
+    'django.contrib.sites is not in settings.INSTALLED_APPS'
+)
 class TestSiteDomain(TestCase):
     def setUp(self):
         Site.objects.all().delete()
@@ -551,7 +611,7 @@ class AliasTest(TestCase):
         Site.objects.all().delete()
 
     def test_create(self):
-        site0 = Site.objects.create()
+        _ = Site.objects.create()
         site1 = Site.objects.create(domain='1.example')
         site2 = Site.objects.create(domain='2.example')
         # Missing site
@@ -599,17 +659,17 @@ class AliasTest(TestCase):
     def test_repr(self):
         site = Site.objects.create(domain='example.com')
         self.assertEqual(repr(Alias.objects.get(site=site)),
-                         u'<Alias: %(domain)s -> %(domain)s>' % site.__dict__)
+                         '<Alias: %(domain)s -> %(domain)s>' % site.__dict__)
 
     def test_managers(self):
         site = Site.objects.create(domain='example.com')
         Alias.objects.create(site=site, domain='example.org')
         self.assertEqual(set(Alias.objects.values_list('domain', flat=True)),
-                         set(['example.com', 'example.org']))
+                         {'example.com', 'example.org'})
         self.assertEqual(set(Alias.canonical.values_list('domain', flat=True)),
-                         set(['example.com']))
+                         {'example.com'})
         self.assertEqual(set(Alias.aliases.values_list('domain', flat=True)),
-                         set(['example.org']))
+                         {'example.org'})
 
     def test_sync_many(self):
         # Create Sites with Aliases
@@ -620,7 +680,7 @@ class AliasTest(TestCase):
         site3 = Site(domain='3.example.com')
         site3.save_base(raw=True)
         self.assertEqual(set(Alias.objects.values_list('domain', flat=True)),
-                         set([site1.domain, site2.domain]))
+                         {site1.domain, site2.domain})
         # Sync existing
         site1.domain = '1.example.org'
         site1.save_base(raw=True)
@@ -628,7 +688,7 @@ class AliasTest(TestCase):
         site2.save_base(raw=True)
         Alias.canonical.sync_many()
         self.assertEqual(set(Alias.objects.values_list('domain', flat=True)),
-                         set([site1.domain, site2.domain]))
+                         {site1.domain, site2.domain})
         # Sync with filter
         site1.domain = '1.example.net'
         site1.save_base(raw=True)
@@ -636,7 +696,7 @@ class AliasTest(TestCase):
         site2.save_base(raw=True)
         Alias.canonical.sync_many(site__domain=site1.domain)
         self.assertEqual(set(Alias.objects.values_list('domain', flat=True)),
-                         set([site1.domain, '2.example.org']))
+                         {site1.domain, '2.example.org'})
 
     def test_sync_missing(self):
         Site.objects.create()
@@ -650,7 +710,7 @@ class AliasTest(TestCase):
         # Only site2 should be updated
         Alias.canonical.sync_missing()
         self.assertEqual(set(Alias.objects.values_list('domain', flat=True)),
-                         set(['1.example.com', site2.domain]))
+                         {'1.example.com', site2.domain})
 
     def test_sync_all(self):
         Site.objects.create()
@@ -664,7 +724,7 @@ class AliasTest(TestCase):
         # Sync all
         Alias.canonical.sync_all()
         self.assertEqual(set(Alias.objects.values_list('domain', flat=True)),
-                         set([site1.domain, site2.domain]))
+                         {site1.domain, site2.domain})
 
     def test_sync(self):
         # Create Site without triggering signals
@@ -776,7 +836,6 @@ class AliasTest(TestCase):
         alias = Alias.objects.create(site=site, domain='*')
         self.assertEqual(Alias.objects.resolve('example.net'),
                          alias)
-
 
 
 @pytest.mark.django_db
@@ -995,28 +1054,21 @@ class TestCookieDomainMiddleware(TestCase):
             self.assertEqual(cookies['a']['domain'], '.extrahost.com')
 
 
-if django.VERSION < (1, 8):
-    TEMPLATE_SETTINGS = {
-        'TEMPLATE_LOADERS': ['multisite.template.loaders.filesystem.Loader'],
-        'TEMPLATE_DIRS': [os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                                  'test_templates')]
+TEMPLATE_SETTINGS = {'TEMPLATES': [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [
+            os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                         'test_templates')
+        ],
+        'OPTIONS': {
+            'loaders': [
+                'multisite.template.loaders.filesystem.Loader',
+            ]
+        },
     }
-else:
-    TEMPLATE_SETTINGS = {'TEMPLATES':[
-        {
-            'BACKEND': 'django.template.backends.django.DjangoTemplates',
-            'DIRS': [
-                os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                             'test_templates')
-            ],
-            'OPTIONS': {
-                'loaders': [
-                    'multisite.template.loaders.filesystem.Loader',
-                ]
-            },
-        }
-    ]
-    }
+]
+}
 
 
 @override_settings(
@@ -1092,6 +1144,6 @@ class UpdatePublicSuffixListCommandTestCase(TestCase):
         self.tldextract().update.side_effect = self.tldextract_update_side_effect
 
         call_command('update_public_suffix_list', verbosity=3)
-        update_message = 'Updating {}'.format(self.cache_file)
+        update_message = f'Updating {self.cache_file}'
         self.assertIn(update_message, self.out.getvalue())
         self.assertIn('TLDExtract.update called', self.out.getvalue())

@@ -1,47 +1,29 @@
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-from __future__ import absolute_import
-
 import os
 import tempfile
+
 try:
     from urlparse import urlsplit, urlunsplit
 except ImportError:
     from urllib.parse import urlsplit, urlunsplit
 
-import django
-from django.conf import settings
-from django.contrib.sites.models import Site, SITE_CACHE
-from django.core.exceptions import DisallowedHost
-from django.core import mail
-
-from django.core.cache import caches
-
-try:
-    # Django > 1.10 uses MiddlewareMixin
-    from django.utils.deprecation import MiddlewareMixin
-except ImportError:
-    MiddlewareMixin = object
-
-from django.core.exceptions import ImproperlyConfigured
-
-try:
-    from django.urls import get_callable
-except ImportError:
-    # Django < 1.10 compatibility
-    from django.core.urlresolvers import get_callable
-
-from django.db.models.signals import pre_save, post_delete, post_init
-from django.http import Http404, HttpResponsePermanentRedirect
-
 from hashlib import md5 as md5_constructor
+
+from django.conf import settings
+from django.contrib.sites.models import SITE_CACHE, Site
+from django.core import mail
+from django.core.cache import caches
+from django.core.exceptions import DisallowedHost, ImproperlyConfigured
+from django.db.models.signals import post_delete, post_init, pre_save
+from django.http import Http404, HttpResponsePermanentRedirect
+from django.urls import get_callable
 
 from .models import Alias
 
 
-class DynamicSiteMiddleware(MiddlewareMixin):
-    def __init__(self, *args, **kwargs):
-        super(DynamicSiteMiddleware, self).__init__(*args, **kwargs)
+class DynamicSiteMiddleware:
+
+    def __init__(self, get_response=None):
+        self.get_response = get_response
         if not hasattr(settings.SITE_ID, 'set'):
             raise TypeError('Invalid type for settings.SITE_ID: %s' %
                             type(settings.SITE_ID).__name__)
@@ -63,8 +45,7 @@ class DynamicSiteMiddleware(MiddlewareMixin):
     def get_cache_key(self, netloc):
         """Returns a cache key based on ``netloc``."""
         netloc = md5_constructor(netloc.encode('utf-8'))
-        return 'multisite.alias.%s.%s' % (self.key_prefix,
-                                          netloc.hexdigest())
+        return f'multisite.alias.{self.key_prefix}.{netloc.hexdigest()}'
 
     def netloc_parse(self, netloc):
         """
@@ -142,12 +123,6 @@ class DynamicSiteMiddleware(MiddlewareMixin):
         else:
             try:
                 view = get_callable(fallback)
-                if django.VERSION < (1,8):
-                    # older django's get_callable falls through on error,
-                    # returning the input as output
-                    # which notably is definitely not a callable here
-                    if not callable(view):
-                        raise ImportError()
             except ImportError:
                 # newer django forces this to be an error, which is tidier.
                 # we rewrite the error to be a bit more helpful to our users.
@@ -172,7 +147,7 @@ class DynamicSiteMiddleware(MiddlewareMixin):
                           url.path, url.query, url.fragment))
         return HttpResponsePermanentRedirect(url)
 
-    def process_request(self, request):
+    def __call__(self, request):
         try:
             netloc = request.get_host().lower()
         except DisallowedHost:
@@ -203,7 +178,7 @@ class DynamicSiteMiddleware(MiddlewareMixin):
         return self.redirect_to_canonical(request, alias)
 
     @classmethod
-    def site_domain_cache_hook(self, sender, instance, *args, **kwargs):
+    def site_domain_cache_hook(cls, sender, instance, *args, **kwargs):
         """Caches Site.domain in the object for site_domain_changed_hook."""
         instance._domain_cache = instance.domain
 
@@ -221,9 +196,9 @@ class DynamicSiteMiddleware(MiddlewareMixin):
         self.cache.clear()
 
 
-class CookieDomainMiddleware(MiddlewareMixin):
+class CookieDomainMiddleware:
     def __init__(self, *args, **kwargs):
-        super(CookieDomainMiddleware, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.depth = int(getattr(settings, 'MULTISITE_COOKIE_DOMAIN_DEPTH', 0))
         if self.depth < 0:
             raise ValueError(

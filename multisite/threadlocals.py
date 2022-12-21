@@ -1,26 +1,8 @@
-# -*- coding: utf-8 -*
-from __future__ import unicode_literals
-from __future__ import absolute_import
-
-import six
-import sys
-
 from contextlib import contextmanager
-from warnings import warn
+from threading import local
 
-try:
-    from threading import local
-except ImportError:
-    from django.utils._threading_local import local
-
-try:
-    # Django > 1.10 uses MiddlewareMixin
-    from django.utils.deprecation import MiddlewareMixin
-except ImportError:
-    MiddlewareMixin = object
-    
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-
 
 _thread_locals = local()
 
@@ -29,10 +11,15 @@ def get_request():
     return getattr(_thread_locals, 'request', None)
 
 
-class ThreadLocalsMiddleware(MiddlewareMixin):
-    """Middleware that saves request in thread local starage"""
-    def process_request(self, request):
+class ThreadLocalsMiddleware:
+    """Middleware that saves request in thread local storage"""
+    def __init__(self, get_response=None):
+        self.get_response = get_response
+
+    def __call__(self, request):
         _thread_locals.request = request
+
+        return self.get_response(request)
 
 
 class SiteID(local):
@@ -52,7 +39,7 @@ class SiteID(local):
         ``default``, if specified, determines the default SITE_ID,
         if that is unset.
         """
-        if default is not None and not isinstance(default, six.integer_types):
+        if default is not None and not isinstance(default, int):
             raise ValueError("%r is not a valid default." % default)
         self.default = default
         self.reset()
@@ -69,21 +56,21 @@ class SiteID(local):
         return self.site_id
 
     def __lt__(self, other):
-        if isinstance(other, six.integer_types):
+        if isinstance(other, int):
             return self.__int__() < other
         elif isinstance(other, SiteID):
             return self.__int__() < other.__int__()
         return True
 
     def __le__(self, other):
-        if isinstance(other, six.integer_types):
+        if isinstance(other, int):
             return self.__int__() <= other
         elif isinstance(other, SiteID):
             return self.__int__() <= other.__int__()
         return True
 
     def __eq__(self, other):
-        if isinstance(other, six.integer_types):
+        if isinstance(other, int):
             return self.__int__() == other
         elif isinstance(other, SiteID):
             return self.__int__() == other.__int__()
@@ -143,7 +130,7 @@ class SiteDomain(SiteID):
         # http://python-future.org/compatible_idioms.html#basestring and
         # https://github.com/PythonCharmers/python-future/blob/master/src/past/types/basestring.py
         # are not super informative, so just fall back on a literal version check:
-        if not isinstance(default, basestring if sys.version_info.major == 2 else str):
+        if not isinstance(default, str):
             raise TypeError("%r is not a valid default domain." % default)
         self.default_domain = default
         self.default = None
@@ -152,9 +139,10 @@ class SiteDomain(SiteID):
     def get_default(self):
         """Returns the default SITE_ID that matches the default domain name."""
         from django.contrib.sites.models import Site
-        if not Site._meta.installed:
-            raise ImproperlyConfigured('django.contrib.sites is not in '
-                                       'settings.INSTALLED_APPS')
+        if 'django.contrib.sites' not in settings.INSTALLED_APPS:
+            raise ImproperlyConfigured(
+                'django.contrib.sites is not in settings.INSTALLED_APPS'
+            )
 
         if self.default is None:
             qset = Site.objects.only('id')

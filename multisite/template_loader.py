@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-from __future__ import unicode_literals
-from __future__ import absolute_import
-
 from .template.loaders.filesystem import Loader
 
 # The template.loaders.filesystem.Loader class used to live here. Now that

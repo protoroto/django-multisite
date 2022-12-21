@@ -1,7 +1,3 @@
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import absolute_import
-
 import logging
 import os
 import tempfile
@@ -20,7 +16,7 @@ class Command(BaseCommand):
             settings, 'MULTISITE_PUBLIC_SUFFIX_LIST_CACHE',
             os.path.join(tempfile.gettempdir(), 'multisite_tld.dat')
         )
-        self.log("Updating {filename}".format(filename=filename))
+        self.log(f"Updating {filename}")
 
         extract = tldextract.TLDExtract(cache_file=filename)
         extract.update(fetch_now=True)
