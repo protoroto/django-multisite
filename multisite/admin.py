@@ -7,6 +7,7 @@ from .forms import SiteForm
 from .models import Alias
 
 
+@admin.register(Alias)
 class AliasAdmin(admin.ModelAdmin):
     """Admin for Alias model."""
     list_display = ('domain', 'site', 'is_canonical', 'redirect_to_canonical')
@@ -15,9 +16,6 @@ class AliasAdmin(admin.ModelAdmin):
     raw_id_fields = ('site',)
     readonly_fields = ('is_canonical',)
     search_fields = ('domain',)
-
-
-admin.site.register(Alias, AliasAdmin)
 
 
 class AliasInline(admin.TabularInline):
