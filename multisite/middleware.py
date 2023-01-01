@@ -148,6 +148,7 @@ class DynamicSiteMiddleware:
         return HttpResponsePermanentRedirect(url)
 
     def __call__(self, request):
+        response = False
         try:
             netloc = request.get_host().lower()
         except DisallowedHost:
@@ -161,21 +162,24 @@ class DynamicSiteMiddleware:
         if alias is not None:
             self.cache.set(cache_key, alias)
             settings.SITE_ID.set(alias.site_id)
-            return self.redirect_to_canonical(request, alias)
+            response = self.redirect_to_canonical(request, alias)
 
-        # Cache missed
-        alias = self.get_alias(netloc)
+        if not response:
+            # Cache missed
+            alias = self.get_alias(netloc)
 
-        # Fallback using settings.MULTISITE_FALLBACK
-        if alias is None:
-            settings.SITE_ID.reset()
-            return self.fallback_view(request)
+            # Fallback using settings.MULTISITE_FALLBACK
+            if alias is None:
+                settings.SITE_ID.reset()
+                response = self.fallback_view(request)
+            else:
+                # Found Site
+                self.cache.set(cache_key, alias)
+                settings.SITE_ID.set(alias.site_id)
+                SITE_CACHE[settings.SITE_ID] = alias.site  # Pre-populate SITE_CACHE
+                response = self.redirect_to_canonical(request, alias)
 
-        # Found Site
-        self.cache.set(cache_key, alias)
-        settings.SITE_ID.set(alias.site_id)
-        SITE_CACHE[settings.SITE_ID] = alias.site  # Pre-populate SITE_CACHE
-        return self.redirect_to_canonical(request, alias)
+        return response or self.get_response(request)
 
     @classmethod
     def site_domain_cache_hook(cls, sender, instance, *args, **kwargs):
