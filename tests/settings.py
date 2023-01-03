@@ -3,9 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from multisite import SiteID
+
 ALLOWED_HOSTS: list[str] = []
 
 BASE_DIR = Path(__file__).resolve().parent
+
+SITE_ID = SiteID(default=1)
 
 DATABASES: dict[str, dict[str, Any]] = {
     'default': {

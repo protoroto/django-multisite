@@ -4,9 +4,10 @@ from unittest import skipUnless
 
 from django.conf import settings
 from django.contrib.sites.models import Site
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest, HttpResponse
 from django.http.response import Http404, HttpResponseBase
-from django.test import RequestFactory as DjangoRequestFactory, TestCase, override_settings
+from django.test import TestCase, override_settings
 
 import pytest
 
@@ -15,18 +16,7 @@ from multisite.hosts import ALLOWED_HOSTS
 from multisite.middleware import DynamicSiteMiddleware
 from multisite.models import Alias
 
-
-class RequestFactory(DjangoRequestFactory):
-    def __init__(self, host):
-        super().__init__()
-        self.host = host
-
-    def get(self, path, data=None, host=None, **extra):
-        if host is None:
-            host = self.host
-        if not data:
-            data = {}
-        return super().get(path=path, data=data, HTTP_HOST=host, **extra)
+from .utils import RequestFactory
 
 
 @pytest.mark.django_db
@@ -184,3 +174,83 @@ class DynamicSiteMiddlewareTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, self.site2.domain)
         self.assertEqual(settings.SITE_ID, self.site2.pk)
+
+
+@pytest.mark.django_db
+@skipUnless(
+    'django.contrib.sites' in settings.INSTALLED_APPS,
+    'django.contrib.sites is not in settings.INSTALLED_APPS'
+)
+@override_settings(
+    SITE_ID=SiteID(default=0),
+    CACHE_MULTISITE_ALIAS='multisite',
+    CACHES={
+        'multisite': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}
+    },    MULTISITE_FALLBACK=None,
+    MULTISITE_FALLBACK_KWARGS={},
+)
+class DynamicSiteMiddlewareFallbackTest(TestCase):
+    def setUp(self):
+        self.host = 'unknown'
+        self.request_factory = RequestFactory(host=self.host)
+        Site.objects.all().delete()
+
+        self.request = self.request_factory.get("/")
+        self.response: HttpResponseBase = HttpResponse("<html><body></body></html>")
+
+        def get_response(request: HttpRequest) -> HttpResponseBase:
+            return self.response
+
+        self.middleware = DynamicSiteMiddleware(get_response)
+
+    def test_404(self):
+        with self.assertRaises(Http404):
+            self.middleware(self.request)
+        self.assertEqual(settings.SITE_ID, 0)
+
+    def test_testserver(self):
+        host = 'testserver'
+        site = Site.objects.create(domain=host)
+
+        request = self.request_factory.get('/', host=host)
+        response = self.middleware(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(settings.SITE_ID, site.pk)
+
+    def test_string_class(self):
+        # Class based
+        settings.MULTISITE_FALLBACK = 'django.views.generic.base.RedirectView'
+        settings.MULTISITE_FALLBACK_KWARGS = {
+            'url': 'http://example.com/',
+            'permanent': False
+        }
+        response = self.middleware(self.request)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], settings.MULTISITE_FALLBACK_KWARGS['url'])
+
+    def test_class_view(self):
+        from django.views.generic.base import RedirectView
+        settings.MULTISITE_FALLBACK = RedirectView.as_view(
+            url='http://example.com/', permanent=False
+        )
+        response = self.middleware(self.request)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], 'http://example.com/')
+
+    @override_settings(MULTISITE_FALLBACK='')
+    def test_invalid(self):
+        with self.assertRaises(ImproperlyConfigured):
+            self.middleware(self.request)
+
+
+@pytest.mark.django_db
+@skipUnless(
+    'django.contrib.sites' in settings.INSTALLED_APPS,
+    'django.contrib.sites is not in settings.INSTALLED_APPS'
+)
+@override_settings(SITE_ID=0,)
+class DynamicSiteMiddlewareSettingsTest(TestCase):
+    def test_invalid_settings(self):
+        self.assertRaises(TypeError, DynamicSiteMiddleware)

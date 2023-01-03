@@ -1,5 +1,6 @@
 coverage
 django
+mock
 pytest
 pytest-cov
 pytest-pythonpath

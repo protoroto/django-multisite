@@ -201,8 +201,8 @@ class DynamicSiteMiddleware:
 
 
 class CookieDomainMiddleware:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, get_response=None):
+        self.get_response = get_response
         self.depth = int(getattr(settings, 'MULTISITE_COOKIE_DOMAIN_DEPTH', 0))
         if self.depth < 0:
             raise ValueError(
@@ -227,7 +227,8 @@ class CookieDomainMiddleware:
     def match_cookies(self, request, response):
         return [c for c in response.cookies.values() if not c['domain']]
 
-    def process_response(self, request, response):
+    def __call__(self, request):
+        response = self.get_response(request)
         matched = self.match_cookies(request=request, response=response)
         if not matched:
             return response     # No cookies to edit

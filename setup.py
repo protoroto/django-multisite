@@ -29,7 +29,7 @@ with open(os.path.join(here, "multisite", "__version__.py")) as f:
     exec(f.read(), version)
 
 
-files = ["multisite/test_templates/*"]
+files = ["tests/templates/*"]
 
 setup(
     name="django-multisite",
