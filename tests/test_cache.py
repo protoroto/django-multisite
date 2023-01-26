@@ -48,8 +48,6 @@ class CacheTest(TestCase):
 
         cache_key = self.middleware.get_cache_key(self.host)
         self.assertEqual(self.middleware.cache.get(cache_key), None)
-        # Make the request
-        request = self.factory.get('/')
         self.assertEqual(response, None)
         self.assertEqual(self.middleware.cache.get(cache_key).site_id, self.site.pk)
         # Change the domain name
@@ -57,8 +55,9 @@ class CacheTest(TestCase):
         self.site.save()
         self.assertEqual(self.middleware.cache.get(cache_key), None)
         # Make the request again, which will now be invalid
-        request = self.factory.get('/')
-        self.assertRaises(Http404, self.middleware.process_request, request)
+        with self.assertRaises(Http404):
+            self.middleware(self.request)
+
         self.assertEqual(settings.SITE_ID, 0)
 
 
@@ -84,7 +83,11 @@ class SiteCacheTest(TestCase):
         settings.SITE_ID.set(self.site.id)
 
     def test_get_current(self):
-        self.assertRaises(KeyError, self.cache.__getitem__, self.site.id)
+
+        with self.assertRaises(KeyError):
+            print(self.cache)
+            self.cache.get(self.site.id)
+
         # Populate cache
         self.assertEqual(Site.objects.get_current(), self.site)
         self.assertEqual(self.cache[self.site.id], self.site)

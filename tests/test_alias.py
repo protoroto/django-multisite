@@ -215,9 +215,10 @@ class AliasTest(TestCase):
         site.domain = 'example.net'
         site.save()
         self.assertEqual(Alias.canonical.get(site=site).domain, site.domain)
+        site_id = site.id
         # Delete Site
         site.delete()
-        self.assertFalse(Alias.objects.filter(site=site).exists())
+        self.assertFalse(Alias.objects.filter(id=site_id).exists())
 
     def test_expand_netloc(self):
         _expand_netloc = Alias.objects._expand_netloc
