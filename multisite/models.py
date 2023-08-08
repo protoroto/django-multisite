@@ -1,7 +1,3 @@
-from __future__ import unicode_literals
-from __future__ import absolute_import
-
-import django
 import operator
 
 from functools import reduce
@@ -15,13 +11,10 @@ from django.db import connections, models, router
 from django.db.models import Q
 from django.db.models.signals import pre_save, post_save
 from django.db.models.signals import post_migrate
+from django.utils.translation import gettext_lazy as _
 
 from .hacks import use_framework_for_site_cache
 
-if django.VERSION < (2,):
-    from django.utils.translation import ugettext_lazy as _
-else:
-    from django.utils.translation import gettext_lazy as _
 
 _site_domain = Site._meta.get_field('domain')
 
@@ -151,7 +144,6 @@ def validate_true_or_none(value):
         raise ValidationError(u'%r must be True or None' % value)
 
 
-@python_2_unicode_compatible
 class Alias(models.Model):
     """
     Model for domain-name aliases for Site objects.
@@ -170,9 +162,11 @@ class Alias(models.Model):
     site = models.ForeignKey(
         Site, related_name='aliases', on_delete=models.CASCADE
     )
-    is_canonical = models.NullBooleanField(
+    is_canonical = models.BooleanField(
         _('is canonical?'),
-        default=None, editable=False,
+        default=None,
+        editable=False,
+        null=True,
         validators=[validate_true_or_none],
         help_text=_('Does this domain name match the one in site?'),
     )
