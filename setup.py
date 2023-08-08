@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 _dir_ = os.path.dirname(__file__)
 
 install_requires = [
-    'Django>=2.2,<4.0',
+    'Django>=3.2,<5.0',
     'tldextract>=1.2,<3'
 ]
 
@@ -48,10 +48,9 @@ setup(name='django-multisite',
                    'License :: OSI Approved :: BSD License',
                    'Operating System :: OS Independent',
                    'Programming Language :: Python',
-                   'Programming Language :: Python :: 3.6',
-                   'Programming Language :: Python :: 3.7',
-                   'Programming Language :: Python :: 3.8',
                    'Programming Language :: Python :: 3.9',
+                   'Programming Language :: Python :: 3.10',
+                   'Programming Language :: Python :: 3.11',
                    'Topic :: Internet',
                    'Topic :: Internet :: WWW/HTTP',
                    'Topic :: Software Development :: Libraries',

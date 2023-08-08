@@ -22,7 +22,7 @@ from .models import Alias
 
 
 class DynamicSiteMiddleware(MiddlewareMixin):
-    def __init__(self, get_response=None):
+    def __init__(self, get_response):
         super().__init__(get_response)
         if not hasattr(settings.SITE_ID, 'set'):
             raise TypeError('Invalid type for settings.SITE_ID: %s' %
@@ -204,7 +204,7 @@ class DynamicSiteMiddleware(MiddlewareMixin):
 
 
 class CookieDomainMiddleware(MiddlewareMixin):
-    def __init__(self, get_response=None):
+    def __init__(self, get_response):
         super().__init__(get_response)
         self.depth = int(getattr(settings, 'MULTISITE_COOKIE_DOMAIN_DEPTH', 0))
         if self.depth < 0:
