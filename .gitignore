@@ -17,4 +17,4 @@ multisite/*.egg-info
 .tox/
 .pytest_cache/
 .env
-build
+build/*
