@@ -74,7 +74,8 @@ class DynamicSiteMiddleware(MiddlewareMixin):
                          netloc in ('testserver', 'adminsite.com'))
         # When using runserver, assume that host will only have one path
         # component. This covers 'localhost' and your machine name.
-        is_local_debug = (settings.DEBUG and len(netloc.split('.')) == 1)
+        netloc_split_lenght = len(netloc.split('.'))
+        is_local_debug = (settings.DEBUG and (netloc_split_lenght in range(1, 4)))
         if is_testserver or is_local_debug:
             try:
                 # Prefer the default SITE_ID
