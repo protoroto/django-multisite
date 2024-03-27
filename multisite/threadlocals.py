@@ -8,7 +8,8 @@ try:
     from django.utils.deprecation import MiddlewareMixin
 except ImportError:
     MiddlewareMixin = object
-    
+
+from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 
 
@@ -142,7 +143,7 @@ class SiteDomain(SiteID):
     def get_default(self):
         """Returns the default SITE_ID that matches the default domain name."""
         from django.contrib.sites.models import Site
-        if not Site._meta.installed:
+        if not apps.is_installed("django.contrib.sites"):
             raise ImproperlyConfigured('django.contrib.sites is not in '
                                        'settings.INSTALLED_APPS')
 

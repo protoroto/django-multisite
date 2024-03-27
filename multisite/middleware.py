@@ -22,7 +22,7 @@ from .models import Alias
 
 
 class DynamicSiteMiddleware(MiddlewareMixin):
-    def __init__(self, get_response=None):
+    def __init__(self, get_response):
         super().__init__(get_response)
         if not hasattr(settings.SITE_ID, 'set'):
             raise TypeError('Invalid type for settings.SITE_ID: %s' %
@@ -74,7 +74,8 @@ class DynamicSiteMiddleware(MiddlewareMixin):
                          netloc in ('testserver', 'adminsite.com'))
         # When using runserver, assume that host will only have one path
         # component. This covers 'localhost' and your machine name.
-        is_local_debug = (settings.DEBUG and len(netloc.split('.')) == 1)
+        netloc_split_lenght = len(netloc.split('.'))
+        is_local_debug = (settings.DEBUG and (netloc_split_lenght in range(1, 4)))
         if is_testserver or is_local_debug:
             try:
                 # Prefer the default SITE_ID
@@ -204,7 +205,7 @@ class DynamicSiteMiddleware(MiddlewareMixin):
 
 
 class CookieDomainMiddleware(MiddlewareMixin):
-    def __init__(self, get_response=None):
+    def __init__(self, get_response):
         super().__init__(get_response)
         self.depth = int(getattr(settings, 'MULTISITE_COOKIE_DOMAIN_DEPTH', 0))
         if self.depth < 0:
